@@ -105,7 +105,7 @@ class User(AbstractUser):
 class Shop(models.Model):
     name = models.CharField(max_length=50, verbose_name='Название')
     url = models.URLField(unique=True, verbose_name='Ссылка')
-    filename = models.CharField(max_length=40, verbose_name='Имя файла для загрузки товаров')
+    filename = models.FileField(upload_to='Shops', verbose_name='Файл с товарами магазина', blank=True, null=True)
 
     class Meta:
         verbose_name = 'Магазин'
@@ -146,12 +146,9 @@ class ProductInfo(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name='Товар', related_name='products_info')
     shop = models.ForeignKey(Shop, on_delete=models.CASCADE, verbose_name='Магазин')
     model = models.CharField(max_length=80, verbose_name='Модель', blank=True)
-    quantity = models.DecimalField(max_digits=7, decimal_places=2, verbose_name='Количество',
-                                   validators=[MinValueValidator('0.01')])
-    price = models.DecimalField(max_digits=7, decimal_places=2, verbose_name='Цена',
-                                validators=[MinValueValidator('0.01')])
-    price_rrc = models.DecimalField(max_digits=7, decimal_places=2, verbose_name='Рекомендуемая розничная цена',
-                                    validators=[MinValueValidator('0.01')])
+    quantity = models.IntegerField()
+    price = models.IntegerField()
+    price_rrc = models.IntegerField()
 
     class Meta:
         verbose_name = 'Информация о продукте'
@@ -208,8 +205,7 @@ class OrderItem(models.Model):
     order = models.ForeignKey(Order, verbose_name='Заказ', on_delete=models.CASCADE, related_name='ordered_items')
     product = models.ForeignKey(ProductInfo, verbose_name='Информация о продукте', on_delete=models.CASCADE,
                                 related_name='ordered_items')
-    quantity = models.DecimalField(max_digits=7, decimal_places=2, verbose_name='Количество',
-                                   validators=[MinValueValidator('0.01')])
+    quantity = models.IntegerField()
     shop = models.ForeignKey(Shop, on_delete=models.CASCADE, verbose_name='Магазин')
 
     class Meta:
