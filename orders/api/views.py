@@ -1,19 +1,13 @@
+import yaml
 from requests import get
 from rest_framework.views import APIView
 from yaml import load as load_yaml, Loader
 from django.core.validators import URLValidator
 from django.http import JsonResponse
-from django.shortcuts import render
-from rest_framework import viewsets
 from rest_framework.exceptions import ValidationError
 
 from api.models import Shop, Category, ProductInfo, Product, Parameter, ProductParameter
-from api.serializers import UploadSerializer
 
-
-class ShopUpdate(viewsets.ModelViewSet):
-    queryset = Shop.objects.all()
-    serializer_class = UploadSerializer
 
 class PartnerUpdate(APIView):
     """
@@ -27,6 +21,7 @@ class PartnerUpdate(APIView):
         #     return JsonResponse({'Status': False, 'Error': 'Только для магазинов'}, status=403)
 
         url = request.data.get('url')
+        filename = request.data.get('filename')
         if url:
             validate_url = URLValidator()
             try:
@@ -35,7 +30,6 @@ class PartnerUpdate(APIView):
                 return JsonResponse({'Status': False, 'Error': str(e)})
             else:
                 stream = get(url).content
-
                 data = load_yaml(stream, Loader=Loader)
                 # shop, _ = Shop.objects.get_or_create(name=data['shop'], user_id=request.user.id)
                 shop, _ = Shop.objects.get_or_create(name=data['shop'])
@@ -46,9 +40,7 @@ class PartnerUpdate(APIView):
                 ProductInfo.objects.filter(shop_id=shop.id).delete()
                 for item in data['goods']:
                     product, _ = Product.objects.get_or_create(name=item['name'], category_id=item['category'])
-
                     product_info = ProductInfo.objects.create(product_id=product.id,
-
                                                               model=item['model'],
                                                               price=item['price'],
                                                               price_rrc=item['price_rrc'],
@@ -62,4 +54,40 @@ class PartnerUpdate(APIView):
 
                 return JsonResponse({'Status': True})
 
-        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+        elif filename:
+            _, file = request.FILES.popitem()
+            shop = Shop()
+            shop.filename = file[0]
+            shop.url = shop.filename.url
+            shop.save()
+            print(shop.pk)
+            with open(f'media/{shop.filename}', 'r') as stream:
+                try:
+                    shop_data = yaml.safe_load(stream)
+                    Shop.objects.filter(filename=shop.filename).update(name=shop_data['shop'])
+                    for category in shop_data['categories']:
+                        category_object, _ = Category.objects.get_or_create(id=category['id'], name=category['name'])
+                        category_object.shops.add(shop.pk)
+                        category_object.save()
+                    ProductInfo.objects.filter(shop_id=shop.pk).delete()
+                    for item in shop_data['goods']:
+                        product, _ = Product.objects.get_or_create(name=item['name'], category_id=item['category'])
+                        product_info = ProductInfo.objects.create(product_id=product.id,
+                                                                  model=item['model'],
+                                                                  price=item['price'],
+                                                                  price_rrc=item['price_rrc'],
+                                                                  quantity=item['quantity'],
+                                                                  shop_id=shop.pk)
+                        for name, value in item['parameters'].items():
+                            parameter_object, _ = Parameter.objects.get_or_create(name=name)
+                            ProductParameter.objects.create(product_info_id=product_info.id,
+                                                            parameter_id=parameter_object.id,
+                                                            value=value)
+                except yaml.YAMLError as exc:
+                    return JsonResponse({'Status': False, 'Error': str(exc)})
+
+            return JsonResponse({'Status': True})
+
+        else:
+            return JsonResponse({'Status': False, 'Errors': 'Необходимо указать либо URL с файлом каталога магазина, '
+                                                            'либо прикрепить файл yaml.'})

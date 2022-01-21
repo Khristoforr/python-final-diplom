@@ -105,7 +105,7 @@ class User(AbstractUser):
 class Shop(models.Model):
     name = models.CharField(max_length=50, verbose_name='Название')
     url = models.URLField(unique=True, verbose_name='Ссылка')
-    filename = models.FileField(upload_to='Shops', verbose_name='Файл с товарами магазина', blank=True, null=True)
+    filename = models.FileField(upload_to='shops', verbose_name='Файл с товарами магазина', blank=True, null=True)
 
     class Meta:
         verbose_name = 'Магазин'
