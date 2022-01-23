@@ -1,12 +1,20 @@
 import yaml
 from requests import get
 from rest_framework.views import APIView
+from rest_framework.viewsets import ModelViewSet
 from yaml import load as load_yaml, Loader
 from django.core.validators import URLValidator
 from django.http import JsonResponse
 from rest_framework.exceptions import ValidationError
 
-from api.models import Shop, Category, ProductInfo, Product, Parameter, ProductParameter
+from api.models import Shop, Category, ProductInfo, Product, Parameter, ProductParameter, User
+from api.serializers import UserSerializer
+
+
+class UserRegistration(ModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    http_method_names = ['post', ]
 
 
 class PartnerUpdate(APIView):
