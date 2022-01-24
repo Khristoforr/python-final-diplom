@@ -2,7 +2,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
-from api.models import User
+from api.models import User, ProductInfo, Category, Product, Shop
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -48,9 +48,35 @@ class UserSerializer(serializers.ModelSerializer):
             raise ValidationError('Указаны не все параметры для регистрации пользователя')
 
 
-# class UploadSerializer(serializers.ModelSerializer):
-#     filename = serializers.FileField(max_length=None, use_url=True)
-#
-#     class Meta:
-#         model = Shop
-#         fields = ['name', 'url', 'filename']
+class ShopSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Shop
+        fields = ['name']
+
+
+class ProductInfoSerializer(serializers.ModelSerializer):
+    shop = ShopSerializer(many=False)
+
+    class Meta:
+        model = ProductInfo
+        fields = ['price', 'price_rrc', 'shop']
+
+
+class ProductSerializer(serializers.ModelSerializer):
+    products_info = ProductInfoSerializer(many=True)
+
+    class Meta:
+        model = Product
+        fields = ['name', 'products_info']
+
+
+class ProductListSerializer(serializers.ModelSerializer):
+    products = ProductSerializer(many=True)
+
+    class Meta:
+        model = Category
+        fields = ['category', 'products']
+        extra_kwargs = {
+            'category': {'source': 'name', 'read_only': True}
+        }

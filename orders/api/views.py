@@ -8,8 +8,10 @@ from yaml import load as load_yaml, Loader
 from django.core.validators import URLValidator
 from django.http import JsonResponse
 from rest_framework.exceptions import ValidationError
+
+from api.filters import ShopFilter
 from api.models import Shop, Category, ProductInfo, Product, Parameter, ProductParameter, User
-from api.serializers import UserSerializer
+from api.serializers import UserSerializer, ProductListSerializer
 
 
 class UserRegistration(ModelViewSet):
@@ -53,8 +55,7 @@ class PartnerUpdate(APIView):
             else:
                 stream = get(url).content
                 data = load_yaml(stream, Loader=Loader)
-                # shop, _ = Shop.objects.get_or_create(name=data['shop'], user_id=request.user.id)
-                shop, _ = Shop.objects.get_or_create(name=data['shop'])
+                shop, _ = Shop.objects.get_or_create(name=data['shop'], owner_id=request.user.id)
                 for category in data['categories']:
                     category_object, _ = Category.objects.get_or_create(id=category['id'], name=category['name'])
                     category_object.shops.add(shop.id)
@@ -82,11 +83,10 @@ class PartnerUpdate(APIView):
             shop.filename = file[0]
             shop.url = shop.filename.url
             shop.save()
-            print(shop.pk)
             with open(f'media/{shop.filename}', 'r') as stream:
                 try:
                     shop_data = yaml.safe_load(stream)
-                    Shop.objects.filter(filename=shop.filename).update(name=shop_data['shop'])
+                    Shop.objects.filter(filename=shop.filename).update(name=shop_data['shop'], owner_id=request.user.id)
                     for category in shop_data['categories']:
                         category_object, _ = Category.objects.get_or_create(id=category['id'], name=category['name'])
                         category_object.shops.add(shop.pk)
@@ -113,3 +113,9 @@ class PartnerUpdate(APIView):
         else:
             return JsonResponse({'Status': False, 'Errors': 'Необходимо указать либо URL с файлом каталога магазина, '
                                                             'либо прикрепить файл yaml.'})
+
+class ProductViewSet(ModelViewSet):
+    queryset = Category.objects.all()
+    serializer_class = ProductListSerializer
+    http_method_names = ['get', ]
+    filterset_class = ShopFilter

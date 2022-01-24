@@ -107,6 +107,9 @@ class Shop(models.Model):
     name = models.CharField(max_length=50, verbose_name='Название')
     url = models.URLField(unique=True, verbose_name='Ссылка')
     filename = models.FileField(upload_to='shops', verbose_name='Файл с товарами магазина', blank=True, null=True)
+    owner = models.OneToOneField(User, verbose_name='Управляющий магазином', blank=True, null=True,
+                                 on_delete=models.CASCADE)
+
 
     class Meta:
         verbose_name = 'Магазин'
