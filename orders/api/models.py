@@ -110,7 +110,6 @@ class Shop(models.Model):
     owner = models.OneToOneField(User, verbose_name='Управляющий магазином', blank=True, null=True,
                                  on_delete=models.CASCADE)
 
-
     class Meta:
         verbose_name = 'Магазин'
         verbose_name_plural = "Список магазинов"

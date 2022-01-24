@@ -11,7 +11,7 @@ from rest_framework.exceptions import ValidationError
 
 from api.filters import ShopFilter
 from api.models import Shop, Category, ProductInfo, Product, Parameter, ProductParameter, User
-from api.serializers import UserSerializer, ProductListSerializer
+from api.serializers import UserSerializer, ProductListSerializer, ProductInfoSerializer, ProductSerializer
 
 
 class UserRegistration(ModelViewSet):
@@ -32,6 +32,7 @@ class LoginAccount(APIView):
             return JsonResponse({'Status': False, 'Errors': 'Не удалось авторизовать'})
 
         return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+
 
 class PartnerUpdate(APIView):
     """
@@ -114,8 +115,19 @@ class PartnerUpdate(APIView):
             return JsonResponse({'Status': False, 'Errors': 'Необходимо указать либо URL с файлом каталога магазина, '
                                                             'либо прикрепить файл yaml.'})
 
-class ProductViewSet(ModelViewSet):
+
+class ProductsViewSet(ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = ProductListSerializer
     http_method_names = ['get', ]
     filterset_class = ShopFilter
+
+
+class ProductInfoViewSet(ModelViewSet):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+    http_method_names = ['get', ]
+
+    def get_queryset(self):
+        queryset = Product.objects.filter(id=self.kwargs.get('id'))
+        return queryset

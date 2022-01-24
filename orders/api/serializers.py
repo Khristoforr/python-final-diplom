@@ -2,7 +2,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
-from api.models import User, ProductInfo, Category, Product, Shop
+from api.models import User, ProductInfo, Category, Product, Shop, ProductParameter, Parameter
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -55,12 +55,28 @@ class ShopSerializer(serializers.ModelSerializer):
         fields = ['name']
 
 
+class ParameterSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Parameter
+        fields = ['name']
+
+
+class ProductParameterSerializer(serializers.ModelSerializer):
+    parameter = ParameterSerializer(many=False)
+
+    class Meta:
+        model = ProductParameter
+        fields = ['parameter', 'value', ]
+
+
 class ProductInfoSerializer(serializers.ModelSerializer):
     shop = ShopSerializer(many=False)
+    product_parameters = ProductParameterSerializer(many=True)
 
     class Meta:
         model = ProductInfo
-        fields = ['price', 'price_rrc', 'shop']
+        fields = ['price', 'price_rrc', 'shop', 'quantity', 'product_parameters', ]
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -68,7 +84,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Product
-        fields = ['name', 'products_info']
+        fields = ['id', 'name', 'products_info']
 
 
 class ProductListSerializer(serializers.ModelSerializer):
