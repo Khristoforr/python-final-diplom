@@ -209,7 +209,6 @@ class OrderItem(models.Model):
     product = models.ForeignKey(ProductInfo, verbose_name='Информация о продукте', on_delete=models.CASCADE,
                                 related_name='ordered_items')
     quantity = models.IntegerField()
-    shop = models.ForeignKey(Shop, on_delete=models.CASCADE, verbose_name='Магазин')
 
     class Meta:
         verbose_name = 'Заказанная позиция'

@@ -1,8 +1,7 @@
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
-
-from api.models import User, ProductInfo, Category, Product, Shop, ProductParameter, Parameter
+from api.models import User, ProductInfo, Category, Product, Shop, ProductParameter, Parameter, Order, OrderItem
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -72,11 +71,14 @@ class ProductParameterSerializer(serializers.ModelSerializer):
 
 class ProductInfoSerializer(serializers.ModelSerializer):
     shop = ShopSerializer(many=False)
-    product_parameters = ProductParameterSerializer(many=True)
+    product_parameters = ProductParameterSerializer(many=True, write_only=True)
 
     class Meta:
         model = ProductInfo
         fields = ['price', 'price_rrc', 'shop', 'quantity', 'product_parameters', ]
+        extra_kwargs = {
+            'price_rrc': {'write_only': True},
+        }
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -96,3 +98,48 @@ class ProductListSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'category': {'source': 'name', 'read_only': True}
         }
+
+
+class ProductInfoSerializer2(serializers.ModelSerializer):
+    class Meta:
+        model = ProductInfo
+        fields = ['id', 'price']
+        read_only_fields = ['price', ]
+
+
+class OrderItemSerializer(serializers.ModelSerializer):
+    product = ProductInfoSerializer2
+
+    class Meta:
+        model = OrderItem
+        fields = ['quantity', 'product', ]
+
+    def validate(self, attrs):
+        if attrs['product'].id < attrs['quantity']:
+            raise ValidationError("Такого количества нет в наличии")
+        elif attrs['quantity'] < 1:
+            raise ValidationError("Нельзя заказать товар в количестве меньше 1 ед.")
+        return attrs
+
+    def create(self, validated_data):
+        order = super().create(validated_data)
+        order.save()
+        return order
+
+
+class ViewBasketSerializer(serializers.ModelSerializer):
+    product = ProductInfoSerializer(many=False)
+
+    class Meta:
+        model = OrderItem
+        fields = ['product_id', 'quantity', 'product']
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    ordered_items = ViewBasketSerializer(many=True)
+    total_sum = serializers.IntegerField()
+
+    class Meta:
+        model = Order
+        fields = ['user_id', 'status', 'ordered_items', 'total_sum']
+        read_only_fields = ['total_sum']

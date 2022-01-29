@@ -1,17 +1,21 @@
 import yaml
 from django.contrib.auth import authenticate
+from django.db import IntegrityError
+from django.db.models import Q, Sum, F
 from requests import get
 from rest_framework.authtoken.models import Token
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from yaml import load as load_yaml, Loader
 from django.core.validators import URLValidator
 from django.http import JsonResponse
 from rest_framework.exceptions import ValidationError
-
 from api.filters import ShopFilter
-from api.models import Shop, Category, ProductInfo, Product, Parameter, ProductParameter, User
-from api.serializers import UserSerializer, ProductListSerializer, ProductInfoSerializer, ProductSerializer
+from api.models import Shop, Category, ProductInfo, Product, Parameter, ProductParameter, User, Order, OrderItem
+from api.serializers import UserSerializer, ProductListSerializer, ProductSerializer, OrderSerializer, \
+    OrderItemSerializer
 
 
 class UserRegistration(ModelViewSet):
@@ -38,6 +42,7 @@ class PartnerUpdate(APIView):
     """
     Класс для обновления прайса от поставщика
     """
+
     def post(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
             return JsonResponse({'Status': False, 'Error': 'Log in required'}, status=403)
@@ -131,3 +136,76 @@ class ProductInfoViewSet(ModelViewSet):
     def get_queryset(self):
         queryset = Product.objects.filter(id=self.kwargs.get('id'))
         return queryset
+
+
+class BasketViewSet(ModelViewSet):
+    queryset = Order.objects.all()
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+    serializer_action_classes = {'list': OrderSerializer, 'create': OrderItemSerializer}
+
+    def get_queryset(self):
+        queryset = Order.objects.filter(user_id=9, status='basket').prefetch_related('ordered_items').annotate(
+            total_sum=Sum(F('ordered_items__quantity') * F('ordered_items__product__price'))).distinct()
+        return queryset
+
+    def get_serializer_class(self):
+        return self.serializer_action_classes.get(self.action)
+
+    def create(self, request, *args, **kwargs):
+        if self.request.data:
+            try:
+                objects_created = 0
+                order, _ = Order.objects.get_or_create(user_id=self.request.user.id, status='basket')
+                for product in self.request.data:
+                    serializer = OrderItemSerializer(data=product)
+                    if serializer.is_valid():
+                        try:
+                            serializer.save(order_id=order.id)
+                            objects_created += 1
+                        except IntegrityError:
+                            return JsonResponse({'Status': False, 'Возникла ошибка!': "Товар уже находится в корзине"})
+                    else:
+                        return JsonResponse({'Status': False, 'Возникла ошибка!': serializer.errors})
+                return JsonResponse({'Status': True, 'Добавлено объектов': objects_created})
+            except TypeError:
+                return JsonResponse({'Status': False, 'Возникла ошибка!': "Некорректный формат данных"})
+        return JsonResponse({'Status': False, 'Возникла ошибка!': "Указаны не все аргументы"})
+
+    @action(methods=['delete'], detail=False)
+    def delete(self, request, *args, **kwargs):
+        products_to_delete = str(self.request.data['items']).split(',')
+        if products_to_delete:
+            basket, _ = Order.objects.get_or_create(user_id=self.request.user.id, status='basket')
+            query = Q()
+            objects_deleted = False
+            for order_item_id in products_to_delete:
+                if order_item_id.isdigit():
+                    query = query | Q(order_id=basket.id, product_id=order_item_id)
+                    objects_deleted = True
+            if objects_deleted:
+                deleted_count = OrderItem.objects.filter(query).delete()[0]
+                return JsonResponse({'Status': True, 'Удалено объектов': deleted_count})
+        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+
+    @action(methods=['put'], detail=False)
+    def put(self, request, *args, **kwargs):
+        if self.request.data:
+            try:
+                objects_updated = 0
+                basket, _ = Order.objects.get_or_create(user_id=self.request.user.id, status='basket')
+
+                for product in self.request.data:
+                    product.update(order_id=basket.id)
+                    serializer = OrderItemSerializer(data=product)
+                    if serializer.is_valid():
+                        if type(product['product']) == int and type(product['quantity']) == int:
+                            objects_updated += OrderItem.objects.filter(order_id=basket.id,
+                                                                        product_id=product['product']).update(
+                                                                        quantity=product['quantity'])
+                    else:
+                        return JsonResponse({'Status': False, 'Возникла ошибка!': serializer.errors})
+                return JsonResponse({"Status": True, "Обновлено объектов": objects_updated})
+            except ValueError:
+                return JsonResponse({'Status': False, 'Возникла ошибка!': "Некорректный формат данных"})
+        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
