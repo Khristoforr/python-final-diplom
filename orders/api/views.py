@@ -13,9 +13,10 @@ from django.core.validators import URLValidator
 from django.http import JsonResponse
 from rest_framework.exceptions import ValidationError
 from api.filters import ShopFilter
-from api.models import Shop, Category, ProductInfo, Product, Parameter, ProductParameter, User, Order, OrderItem
+from api.models import Shop, Category, ProductInfo, Product, Parameter, ProductParameter, User, Order, OrderItem, \
+    Contact
 from api.serializers import UserSerializer, ProductListSerializer, ProductSerializer, OrderSerializer, \
-    OrderItemSerializer
+    OrderItemSerializer, ContactSerializer
 
 
 class UserRegistration(ModelViewSet):
@@ -202,10 +203,95 @@ class BasketViewSet(ModelViewSet):
                         if type(product['product']) == int and type(product['quantity']) == int:
                             objects_updated += OrderItem.objects.filter(order_id=basket.id,
                                                                         product_id=product['product']).update(
-                                                                        quantity=product['quantity'])
+                                quantity=product['quantity'])
                     else:
                         return JsonResponse({'Status': False, 'Возникла ошибка!': serializer.errors})
                 return JsonResponse({"Status": True, "Обновлено объектов": objects_updated})
             except ValueError:
                 return JsonResponse({'Status': False, 'Возникла ошибка!': "Некорректный формат данных"})
         return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+
+
+class OrderViewSet(ModelViewSet):
+    queryset = Order.objects.all()
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = Order.objects.filter(user_id=self.request.user.id).exclude(status='basket').prefetch_related(
+            'ordered_items').annotate(
+            total_sum=Sum(F('ordered_items__quantity') * F('ordered_items__product__price'))).distinct()
+        return queryset
+
+    @staticmethod
+    def get_user_info(user_id, value):
+        info = User.objects.filter(id=user_id)
+
+    def create(self, request, *args, **kwargs):
+        if {'id'}.issubset(self.request.data):
+            if self.request.data['id'].isdigit():
+                try:
+                    is_updated = Order.objects.filter(id=self.request.data['id']).update(status='new')
+                except IntegrityError:
+                    return JsonResponse({'Status': False, 'Errors': 'Неправильно указаны аргументы'})
+                else:
+                    if is_updated:
+                        user_info = User.objects.filter(id=self.request.user.id).first()
+                        phone = Contact.objects.filter(id=self.request.user.id, type='phone').first()
+                        if phone:
+                            return JsonResponse({'Status': True,
+                                                 "last_name": user_info.last_name,
+                                                 "first_name": user_info.first_name,
+                                                 "email": user_info.email,
+                                                 "phone": phone})
+                        else:
+                            return JsonResponse({'Status': False, 'Errors': 'Укажите контактный номер для связи'})
+
+        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+
+
+class ContactViewSet(ModelViewSet):
+    queryset = Contact.objects.all()
+    serializer_class = ContactSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = Contact.objects.filter(user_id=self.request.user.id)
+        return queryset
+
+    @action(methods=['delete'], detail=False)
+    def delete(self, request, *args, **kwargs):
+        contacts_to_delete = str(self.request.data['items']).split(',')
+        if contacts_to_delete:
+            query = Q()
+            objects_deleted = False
+            for contact_id in contacts_to_delete:
+                if contact_id.isdigit():
+                    print(contact_id)
+                    query = query | Q(user_id=request.user.id, id=contact_id)
+                    objects_deleted = True
+            if objects_deleted:
+                deleted_count = Contact.objects.filter(query).delete()[0]
+                return JsonResponse({'Status': True, 'Удалено объектов': deleted_count})
+        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+
+    @action(methods=['put'], detail=False)
+    def put(self, request, *args, **kwargs):
+        if 'id' in self.request.data:
+            if self.request.data['id'].isdigit():
+                contact = Contact.objects.filter(id=self.request.data['id'], user_id=self.request.user.id).first()
+                if contact:
+                    serializer = ContactSerializer(contact, data=request.data, partial=True)
+                    if serializer.is_valid():
+                        serializer.save()
+                        return JsonResponse({"Status": True})
+                    else:
+                        return JsonResponse({'Status': False, 'Errors': serializer.errors})
+        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+
+    def perform_create(self, serializer):
+        user_id = self.request.user.id
+        try:
+            serializer.save(user_id=user_id)
+        except:
+            raise ValidationError("Контакт уже существует")

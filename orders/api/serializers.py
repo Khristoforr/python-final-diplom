@@ -1,7 +1,9 @@
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
-from api.models import User, ProductInfo, Category, Product, Shop, ProductParameter, Parameter, Order, OrderItem
+from api.models import User, ProductInfo, Category, Product, Shop, ProductParameter, Parameter, Order, OrderItem, \
+    Contact
+import re
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -136,10 +138,34 @@ class ViewBasketSerializer(serializers.ModelSerializer):
 
 
 class OrderSerializer(serializers.ModelSerializer):
-    ordered_items = ViewBasketSerializer(many=True)
-    total_sum = serializers.IntegerField()
+    ordered_items = ViewBasketSerializer(many=True, required=False)
+    total_sum = serializers.IntegerField(required=False)
 
     class Meta:
         model = Order
-        fields = ['user_id', 'status', 'ordered_items', 'total_sum']
-        read_only_fields = ['total_sum']
+        fields = ['id', 'user_id', 'status', 'ordered_items', 'total_sum']
+
+
+class ContactSerializer(serializers.ModelSerializer):
+    @staticmethod
+    def check_address(address):
+        if {'город', 'улица', 'дом', 'квартира'} & set(address.split()):
+            return True
+        else:
+            return False
+
+    class Meta:
+        model = Contact
+        fields = ['type', 'user', 'value']
+
+    def validate(self, attrs):
+        if attrs['type'] == 'phone':
+            if re.search(r"((8|\+7)[\- ]?)?(\(?\d{3}\)?[\- ]?)?[\d\- ]{7,10}", attrs['value']) is not None:
+                return attrs
+            else:
+                raise ValidationError({'phone': "Некорректный формат номера"})
+        elif attrs['type'] == 'address':
+            if self.check_address(self, address=attrs['value']):
+                return attrs
+            else:
+                raise ValidationError({'address': "Некорректный формат адреса"})

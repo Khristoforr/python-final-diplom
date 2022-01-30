@@ -228,6 +228,9 @@ class Contact(models.Model):
     class Meta:
         verbose_name = 'Контакты пользователя'
         verbose_name_plural = "Список контактов пользователя"
+        constraints = [
+            models.UniqueConstraint(fields=['type', 'user_id'], name='Контакт уже создан'),
+        ]
 
     def __str__(self):
         return f'{self.user.name} - {self.value}'
