@@ -14,15 +14,23 @@ from django.http import JsonResponse
 from rest_framework.exceptions import ValidationError
 from api.filters import ShopFilter
 from api.models import Shop, Category, ProductInfo, Product, Parameter, ProductParameter, User, Order, OrderItem, \
-    Contact
+    Contact, ConfirmEmailToken
 from api.serializers import UserSerializer, ProductListSerializer, ProductSerializer, OrderSerializer, \
     OrderItemSerializer, ContactSerializer
+from api.signals import new_user_registered, new_order
 
 
 class UserRegistration(ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     http_method_names = ['post', ]
+
+    def perform_create(self, serializer):
+        print(123)
+
+        serializer.save()
+        user_id = User.objects.order_by('id').last().id
+        new_user_registered.send(sender=self.__class__, user_id=user_id)
 
 
 class LoginAccount(APIView):
@@ -239,11 +247,13 @@ class OrderViewSet(ModelViewSet):
                         user_info = User.objects.filter(id=self.request.user.id).first()
                         phone = Contact.objects.filter(id=self.request.user.id, type='phone').first()
                         if phone:
+                            new_order.send(sender=self.__class__, user_id=self.request.user.id)
                             return JsonResponse({'Status': True,
                                                  "last_name": user_info.last_name,
                                                  "first_name": user_info.first_name,
                                                  "email": user_info.email,
                                                  "phone": phone})
+
                         else:
                             return JsonResponse({'Status': False, 'Errors': 'Укажите контактный номер для связи'})
 
@@ -295,3 +305,26 @@ class ContactViewSet(ModelViewSet):
             serializer.save(user_id=user_id)
         except:
             raise ValidationError("Контакт уже существует")
+
+
+class ConfirmAccount(APIView):
+    """
+    Класс для подтверждения почтового адреса
+    """
+    # Регистрация методом POST
+    def post(self, request, *args, **kwargs):
+
+        # проверяем обязательные аргументы
+        if {'email', 'token'}.issubset(request.data):
+
+            token = ConfirmEmailToken.objects.filter(user__email=request.data['email'],
+                                                     key=request.data['token']).first()
+            if token:
+                token.user.is_active = True
+                token.user.save()
+                token.delete()
+                return JsonResponse({'Status': True})
+            else:
+                return JsonResponse({'Status': False, 'Errors': 'Неправильно указан токен или email'})
+
+        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
