@@ -67,9 +67,12 @@ def new_order_signal(user_id, **kwargs):
 
     msg = EmailMultiAlternatives(
         # title:
-        f"Обновление статуса заказа",
+        "Cпасибо за заказ",
         # message:
-        'Заказ сформирован',
+        f'Номер вашего заказа: {kwargs["order_id"]}\n'
+        f'Наш оператор свяжется с Вами в ближайшее время для уточнения деталей заказа.'
+        f'Статус заказов вы можете посмотреть в разделе "Заказы"'
+        ,
         # from:
         settings.EMAIL_HOST_USER,
         # to:

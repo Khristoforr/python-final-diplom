@@ -26,8 +26,6 @@ class UserRegistration(ModelViewSet):
     http_method_names = ['post', ]
 
     def perform_create(self, serializer):
-        print(123)
-
         serializer.save()
         user_id = User.objects.order_by('id').last().id
         new_user_registered.send(sender=self.__class__, user_id=user_id)
@@ -151,15 +149,12 @@ class BasketViewSet(ModelViewSet):
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
-    serializer_action_classes = {'list': OrderSerializer, 'create': OrderItemSerializer}
 
     def get_queryset(self):
-        queryset = Order.objects.filter(user_id=9, status='basket').prefetch_related('ordered_items').annotate(
+        queryset = Order.objects.filter(user_id=self.request.user.id, status='basket').\
+            prefetch_related('ordered_items').annotate(
             total_sum=Sum(F('ordered_items__quantity') * F('ordered_items__product__price'))).distinct()
         return queryset
-
-    def get_serializer_class(self):
-        return self.serializer_action_classes.get(self.action)
 
     def create(self, request, *args, **kwargs):
         if self.request.data:
@@ -194,7 +189,10 @@ class BasketViewSet(ModelViewSet):
                     objects_deleted = True
             if objects_deleted:
                 deleted_count = OrderItem.objects.filter(query).delete()[0]
-                return JsonResponse({'Status': True, 'Удалено объектов': deleted_count})
+                if deleted_count != 0:
+                    return JsonResponse({'Status': True, 'Удалено объектов': deleted_count})
+                else:
+                    return JsonResponse({'Status': False, 'Errors': 'Укажите корректные товары для удаления'})
         return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
 
     @action(methods=['put'], detail=False)
@@ -203,7 +201,6 @@ class BasketViewSet(ModelViewSet):
             try:
                 objects_updated = 0
                 basket, _ = Order.objects.get_or_create(user_id=self.request.user.id, status='basket')
-
                 for product in self.request.data:
                     product.update(order_id=basket.id)
                     serializer = OrderItemSerializer(data=product)
@@ -231,10 +228,6 @@ class OrderViewSet(ModelViewSet):
             total_sum=Sum(F('ordered_items__quantity') * F('ordered_items__product__price'))).distinct()
         return queryset
 
-    @staticmethod
-    def get_user_info(user_id, value):
-        info = User.objects.filter(id=user_id)
-
     def create(self, request, *args, **kwargs):
         if {'id'}.issubset(self.request.data):
             if self.request.data['id'].isdigit():
@@ -245,14 +238,22 @@ class OrderViewSet(ModelViewSet):
                 else:
                     if is_updated:
                         user_info = User.objects.filter(id=self.request.user.id).first()
-                        phone = Contact.objects.filter(id=self.request.user.id, type='phone').first()
+                        phone = Contact.objects.filter(user_id=self.request.user.id, type='phone').first()
+                        total_sum = Order.objects.filter(id=self.request.data['id']).prefetch_related(
+                            'ordered_items').annotate(
+                            total_sum=Sum(F('ordered_items__quantity') * F('ordered_items__product__price'))
+                        ).distinct()[0].total_sum
                         if phone:
-                            new_order.send(sender=self.__class__, user_id=self.request.user.id)
+                            new_order.send(sender=self.__class__, user_id=self.request.user.id,
+                                           order_id=self.request.data['id'],
+                                           )
                             return JsonResponse({'Status': True,
                                                  "last_name": user_info.last_name,
                                                  "first_name": user_info.first_name,
                                                  "email": user_info.email,
-                                                 "phone": phone})
+                                                 "phone": phone.value,
+                                                 "total_sum": total_sum
+                                                 })
 
                         else:
                             return JsonResponse({'Status': False, 'Errors': 'Укажите контактный номер для связи'})
@@ -271,19 +272,21 @@ class ContactViewSet(ModelViewSet):
 
     @action(methods=['delete'], detail=False)
     def delete(self, request, *args, **kwargs):
-        contacts_to_delete = str(self.request.data['items']).split(',')
-        if contacts_to_delete:
-            query = Q()
-            objects_deleted = False
-            for contact_id in contacts_to_delete:
-                if contact_id.isdigit():
-                    print(contact_id)
-                    query = query | Q(user_id=request.user.id, id=contact_id)
-                    objects_deleted = True
-            if objects_deleted:
-                deleted_count = Contact.objects.filter(query).delete()[0]
-                return JsonResponse({'Status': True, 'Удалено объектов': deleted_count})
-        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+        try:
+            contacts_to_delete = str(self.request.data['items']).split(',')
+            if contacts_to_delete:
+                query = Q()
+                objects_deleted = False
+                for contact_id in contacts_to_delete:
+                    if contact_id.isdigit():
+                        query = query | Q(user_id=request.user.id, id=contact_id)
+                        objects_deleted = True
+                if objects_deleted:
+                    deleted_count = Contact.objects.filter(query).delete()[0]
+                    return JsonResponse({'Status': True, 'Удалено объектов': deleted_count})
+            return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+        except KeyError:
+            return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
 
     @action(methods=['put'], detail=False)
     def put(self, request, *args, **kwargs):
@@ -303,8 +306,8 @@ class ContactViewSet(ModelViewSet):
         user_id = self.request.user.id
         try:
             serializer.save(user_id=user_id)
-        except:
-            raise ValidationError("Контакт уже существует")
+        except IntegrityError:
+            raise ValidationError({"Status": False, "Errors": "Контакт уже существует"})
 
 
 class ConfirmAccount(APIView):

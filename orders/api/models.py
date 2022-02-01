@@ -146,7 +146,7 @@ class Shop(models.Model):
     url = models.URLField(unique=True, verbose_name='Ссылка')
     filename = models.FileField(upload_to='shops', verbose_name='Файл с товарами магазина', blank=True, null=True)
     owner = models.OneToOneField(User, verbose_name='Управляющий магазином', blank=True, null=True,
-                                 on_delete=models.CASCADE)
+                                 on_delete=models.DO_NOTHING)
 
     class Meta:
         verbose_name = 'Магазин'
@@ -271,4 +271,4 @@ class Contact(models.Model):
         ]
 
     def __str__(self):
-        return f'{self.user.name} - {self.value}'
+        return f'{self.user.last_name} - {self.value}'

@@ -24,7 +24,7 @@ class UserSerializer(serializers.ModelSerializer):
             errors['password'] = list(password_error.messages)
 
         if errors:
-            raise ValidationError(errors)
+            raise ValidationError({"Status": False, "Errors": errors})
 
         return super(UserSerializer, self).validate(value)
 
@@ -42,12 +42,15 @@ class UserSerializer(serializers.ModelSerializer):
             password = self.validated_data['password']
             password2 = self.validated_data['password2']
             if password != password2:
-                raise ValidationError({'password': 'Passwords do not match'})
+                raise ValidationError({"Status": False, 'Errors': 'Passwords do not match'})
             user.set_password(password)
             user.save()
         except KeyError:
-            raise ValidationError('Указаны не все параметры для регистрации пользователя')
+            raise ValidationError({"Status": False, "Errors": 'Указаны не все параметры для регистрации пользователя'})
 
+    def to_representation(self, instance):
+        representation = {'Status': True}
+        return representation
 
 class ShopSerializer(serializers.ModelSerializer):
 
@@ -73,7 +76,7 @@ class ProductParameterSerializer(serializers.ModelSerializer):
 
 class ProductInfoSerializer(serializers.ModelSerializer):
     shop = ShopSerializer(many=False)
-    product_parameters = ProductParameterSerializer(many=True, write_only=True)
+    product_parameters = ProductParameterSerializer(many=True)
 
     class Meta:
         model = ProductInfo
@@ -117,7 +120,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
         fields = ['quantity', 'product', ]
 
     def validate(self, attrs):
-        if attrs['product'].id < attrs['quantity']:
+        if attrs['product'].quantity < attrs['quantity']:
             raise ValidationError("Такого количества нет в наличии")
         elif attrs['quantity'] < 1:
             raise ValidationError("Нельзя заказать товар в количестве меньше 1 ед.")
@@ -143,7 +146,7 @@ class OrderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Order
-        fields = ['id', 'user_id', 'status', 'ordered_items', 'total_sum']
+        fields = ['id', 'dt', 'user_id', 'status', 'ordered_items', 'total_sum']
 
 
 class ContactSerializer(serializers.ModelSerializer):
@@ -163,9 +166,13 @@ class ContactSerializer(serializers.ModelSerializer):
             if re.search(r"((8|\+7)[\- ]?)?(\(?\d{3}\)?[\- ]?)?[\d\- ]{7,10}", attrs['value']) is not None:
                 return attrs
             else:
-                raise ValidationError({'phone': "Некорректный формат номера"})
+                raise ValidationError({'Status': False, 'Errors': "Некорректный формат номера"})
         elif attrs['type'] == 'address':
-            if self.check_address(self, address=attrs['value']):
+            if self.check_address(address=attrs['value']):
                 return attrs
             else:
-                raise ValidationError({'address': "Некорректный формат адреса"})
+                raise ValidationError({'Status': False, 'Errors': "Некорректный формат адреса"})
+
+    def to_representation(self, instance):
+        rep = {"Status":True}
+        return rep

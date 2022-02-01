@@ -12,6 +12,6 @@ r.register('basket', BasketViewSet)
 r.register('orders', OrderViewSet)
 r.register('contacts', ContactViewSet)
 urlpatterns = r.urls
-urlpatterns += [path('upload2/', PartnerUpdate.as_view())]
+urlpatterns += [path('upload/', PartnerUpdate.as_view())]
 urlpatterns += [path('login/', LoginAccount.as_view())]
 urlpatterns += [path('register/confirm', ConfirmAccount.as_view())]
