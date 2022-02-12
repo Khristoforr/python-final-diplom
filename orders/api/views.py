@@ -17,7 +17,7 @@ from api.models import Shop, Category, ProductInfo, Product, Parameter, ProductP
     Contact, ConfirmEmailToken
 from api.serializers import UserSerializer, ProductListSerializer, ProductSerializer, OrderSerializer, \
     OrderItemSerializer, ContactSerializer
-from api.signals import new_user_registered, new_order
+from .tasks import new_order_task, new_user_registered_task
 
 
 class UserRegistration(ModelViewSet):
@@ -28,7 +28,7 @@ class UserRegistration(ModelViewSet):
     def perform_create(self, serializer):
         serializer.save()
         user_id = User.objects.order_by('id').last().id
-        new_user_registered.send(sender=self.__class__, user_id=user_id)
+        new_user_registered_task.delay(user_id=user_id)
 
 
 class LoginAccount(APIView):
@@ -151,7 +151,7 @@ class BasketViewSet(ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Order.objects.filter(user_id=self.request.user.id, status='basket').\
+        queryset = Order.objects.filter(user_id=self.request.user.id, status='basket'). \
             prefetch_related('ordered_items').annotate(
             total_sum=Sum(F('ordered_items__quantity') * F('ordered_items__product__price'))).distinct()
         return queryset
@@ -244,15 +244,15 @@ class OrderViewSet(ModelViewSet):
                             total_sum=Sum(F('ordered_items__quantity') * F('ordered_items__product__price'))
                         ).distinct()[0].total_sum
                         if phone:
-                            new_order.send(sender=self.__class__, user_id=self.request.user.id,
-                                           order_id=self.request.data['id'],
-                                           )
+                            new_order_task.delay(user_id=self.request.user.id,
+                                                        order_id=self.request.data['id'])
                             return JsonResponse({'Status': True,
                                                  "last_name": user_info.last_name,
                                                  "first_name": user_info.first_name,
                                                  "email": user_info.email,
                                                  "phone": phone.value,
-                                                 "total_sum": total_sum
+                                                 "total_sum": total_sum,
+                                                 'send_to': self.request.user.email,
                                                  })
 
                         else:
@@ -314,6 +314,7 @@ class ConfirmAccount(APIView):
     """
     Класс для подтверждения почтового адреса
     """
+
     # Регистрация методом POST
     def post(self, request, *args, **kwargs):
 
