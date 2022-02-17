@@ -128,7 +128,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '5/minute',
         'user': '1000/day'
-    }
+    },
 }
 
 # Internationalization
