@@ -21,17 +21,26 @@ from .tasks import new_order_task, new_user_registered_task
 
 
 class UserRegistration(ModelViewSet):
+    """
+    Класс для регистрации пользователей
+    """
     queryset = User.objects.all()
     serializer_class = UserSerializer
     http_method_names = ['post', ]
 
     def perform_create(self, serializer):
+        """метод, отвечающий за сохранине пользователя и последующую отправку e-mail
+        для подтверждения регитрации"""
         serializer.save()
         user_id = User.objects.order_by('id').last().id
         new_user_registered_task.delay(user_id=user_id)
 
 
 class LoginAccount(APIView):
+    """
+    Класс для аутентификации пользователей
+    """
+
     def post(self, request, *args, **kwargs):
         if {'email', 'password'}.issubset(request.data):
             user = authenticate(request, username=request.data['email'], password=request.data['password'])
@@ -59,6 +68,8 @@ class PartnerUpdate(APIView):
 
         url = request.data.get('url')
         filename = request.data.get('filename')
+
+        # в случае обновления прайса по URL
         if url:
             validate_url = URLValidator()
             try:
@@ -90,6 +101,7 @@ class PartnerUpdate(APIView):
 
                 return JsonResponse({'Status': True})
 
+        # в случае обновления прайса через загрузку файла
         elif filename:
             _, file = request.FILES.popitem()
             shop = Shop()
@@ -129,6 +141,9 @@ class PartnerUpdate(APIView):
 
 
 class ProductsViewSet(ModelViewSet):
+    """
+    Класс для просмотра всех доступных продуктов, с возможностью фильтрации по магазинам и категориям товаров
+    """
     queryset = Category.objects.all()
     serializer_class = ProductListSerializer
     http_method_names = ['get', ]
@@ -136,6 +151,9 @@ class ProductsViewSet(ModelViewSet):
 
 
 class ProductInfoViewSet(ModelViewSet):
+    """
+    Класс для просмотра карточки товара
+    """
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     http_method_names = ['get', ]
@@ -146,6 +164,9 @@ class ProductInfoViewSet(ModelViewSet):
 
 
 class BasketViewSet(ModelViewSet):
+    """
+    Класс для выполнения операций с корзиной товаров
+    """
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
@@ -218,6 +239,9 @@ class BasketViewSet(ModelViewSet):
 
 
 class OrderViewSet(ModelViewSet):
+    """
+    Класс для формирования заказов пользователя
+    """
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
@@ -245,7 +269,7 @@ class OrderViewSet(ModelViewSet):
                         ).distinct()[0].total_sum
                         if phone:
                             new_order_task.delay(user_id=self.request.user.id,
-                                                        order_id=self.request.data['id'])
+                                                 order_id=self.request.data['id'])
                             return JsonResponse({'Status': True,
                                                  "last_name": user_info.last_name,
                                                  "first_name": user_info.first_name,
@@ -262,6 +286,9 @@ class OrderViewSet(ModelViewSet):
 
 
 class ContactViewSet(ModelViewSet):
+    """
+     Класс, отвечающий за контактные данные пользователя
+     """
     queryset = Contact.objects.all()
     serializer_class = ContactSerializer
     permission_classes = [IsAuthenticated]

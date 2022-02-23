@@ -50,6 +50,8 @@ INSTALLED_APPS = [
     'allauth.socialaccount',
     'allauth.socialaccount.providers.discord',
     'allauth.socialaccount.providers.google',
+    'drf_spectacular',
+    'drf_spectacular_sidecar',
 ]
 
 SITE_ID = 2
@@ -155,6 +157,14 @@ REST_FRAMEWORK = {
         'anon': '5/minute',
         'user': '1000/day'
     },
+
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema'
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'orders_api',
+    'DESCRIPTION': 'The project for order goods from stores',
+    'VERSION': '1.0.0',
 }
 
 # Internationalization
